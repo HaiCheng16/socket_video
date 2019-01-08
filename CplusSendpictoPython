@@ -1,0 +1,132 @@
+#define WIN32_LEAN_AND_MEAN
+#include <stdio.h>
+#include <string>
+#include <iostream>
+//#include <Winsock2.h>
+#include <opencv2/opencv.hpp>
+#include <vector> 
+#include <thread>
+#include <time.h>
+#pragma comment(lib,"ws2_32.lib")
+
+using namespace cv;
+using namespace std;
+class TcpSend 
+{
+public:
+	SOCKET sockClient;//客户端Socket
+	TcpSend() 
+	{
+		//tcp初始化
+		TcpSendInit();
+	}
+	void TcpSendInit()
+	{
+		WSADATA wsaData;
+		SOCKADDR_IN addrServer;//服务端地址
+		WSAStartup(MAKEWORD(2, 2), &wsaData);
+		//新建客户端socket
+		sockClient = socket(AF_INET, SOCK_STREAM, 0);
+		//定义要连接的服务端地址
+		addrServer.sin_addr.S_un.S_addr = inet_addr("127.0.0.1");//目标IP(10.106.20.74是回送地址)
+		addrServer.sin_family = AF_INET;
+		addrServer.sin_port = htons(12900);//连接端口
+		//连接到服务端
+		auto ret=connect(sockClient, (SOCKADDR*)&addrServer, sizeof(SOCKADDR));
+		printf("ret=%d", ret);
+		if (ret == 0)
+		{
+			printf("connected.\n");
+		}
+	}
+
+	void SendImage(Mat image)
+	{
+
+		//image = imread("C:/Users/a/Desktop/a.jpg");
+		//printf("send over!");
+
+		//新建线程发送图片
+		thread mythread([=]() {
+			clock_t start, finish;
+			double totaltime;
+
+			vector<uchar> data_encode;
+			//压缩质量
+			vector<int> com_params;
+			com_params.push_back(CV_IMWRITE_JPEG_QUALITY);  //选择jpeg
+			com_params.push_back(20); //在这个填入你要的图片质量
+			//imencode(".jpg", image, data_encode/*, com_params*/);
+			imencode(".png", image, data_encode);
+			
+			start = clock();
+			int len_encode = data_encode.size();
+			string len = to_string(len_encode);
+			int length = len.length();
+			for (int i = 0; i < 16 - length; i++)
+			{
+				len = len + " ";
+			}
+			//发送数据长度
+			send(sockClient, len.c_str(), strlen(len.c_str()), 0);
+			//发送数据
+			//char buffer[800000] = {0};
+			char*buffer =new char[1500000];
+			memcpy(buffer, &data_encode[0], data_encode.size() * sizeof(char));
+			int ret=send(sockClient, buffer, len_encode, 0);
+			finish = clock();
+			delete[]buffer;
+			totaltime = (double)(finish - start) / CLOCKS_PER_SEC;
+			printf("send over +%d totaltime==%f",ret,totaltime);
+		});
+		mythread.join();
+	}
+
+
+
+	//void SendImage(Mat image)
+	//{
+
+	//	//image = imread("C:/Users/a/Desktop/a.jpg");
+	//	//printf("send over!");
+	//	//新建线程发送图片
+	//	thread mythread([=]() {
+	//		clock_t start, finish;
+	//		double totaltime;
+
+	//		int size = image.total() * image.elemSize();
+	//		byte * bytes = new byte[size];  // you will have to delete[] that later
+	//		std::memcpy(bytes, image.data, size * sizeof(byte));
+
+	//		//vector<uchar> data_encode;
+	//		////压缩质量
+	//		//vector<int> com_params;
+	//		//com_params.push_back(CV_IMWRITE_JPEG_QUALITY);  //选择jpeg
+	//		//com_params.push_back(20); //在这个填入你要的图片质量
+	//		//imencode(".jpg", image, data_encode, com_params);
+
+	//		start = clock();
+	//		//int len_encode = size;
+	//		string len = to_string(size);
+	//		int length =len.length();
+	//		for (int i = 0; i < 16 - length; i++)
+	//		{
+	//			len = len + " ";
+	//		}
+	//		//发送数据长度
+	//		send(sockClient, len.c_str(),16, 0);
+	//		int ret = send(sockClient, (char*)bytes, size, 0);
+	//		delete []bytes;
+	//		finish = clock();
+	//		totaltime = (double)(finish - start) / CLOCKS_PER_SEC;
+	//		printf("send over +%d totaltime==%f", ret, totaltime);
+	//	});
+	//	mythread.join();
+	//}
+	~TcpSend()
+	{
+		closesocket(sockClient);
+		WSACleanup();
+	}
+};
+
